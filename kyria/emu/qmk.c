@@ -99,6 +99,7 @@ void oled_clear(void)
 {
     setcolor(color(0));
     SDL_RenderClear(ren);
+    SDL_RenderPresent(ren);
 }
 
 static void flush(void)
@@ -114,10 +115,7 @@ static void putpixel(uint16_t x, uint16_t y, color_t c)
 
 void oled_write_pixel(uint8_t x, uint8_t y, bool on)
 {
-    if (!dirty) {
-        oled_clear();
-        dirty = true;
-    }
+    dirty = true;
 
     if (x < SCREEN_WIDTH && y < SCREEN_HEIGHT) {
         putpixel(x, y, color(on));
