@@ -13,16 +13,21 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include QMK_KEYBOARD_H
 
+#ifndef QMK_EMULATOR
+#include QMK_KEYBOARD_H
 #include "config.h"
 #include "pusheen.h"
+#else
+#include "emu/qmk.h"
+#endif
 
-#define arylen(x) (sizeof(x)/sizeof(x[0]))
+#include "ripple.h"
 
 #define KC_LANG KC_LEFT_ANGLE_BRACKET
 #define KC_RANG KC_RIGHT_ANGLE_BRACKET
 
+#ifndef QMK_EMULATOR
 enum layers {
     _QWERTY = 0,
     _LOWER,
@@ -113,94 +118,20 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     ),
 };
 
-layer_state_t layer_state_set_user(layer_state_t state) {
+layer_state_t layer_state_set_user(layer_state_t state)
+{
     return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
 }
-
-#ifdef OLED_ENABLE
-oled_rotation_t oled_init_user(oled_rotation_t rotation) {
-    return OLED_ROTATION_180;
-}
-
-static size_t g_frame = 0;
+#endif
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record)
 {
-    if (record->event.pressed) {
-        g_frame = (g_frame + 1) % FRAMECOUNT;
-    }
-
+    process_record_ripples(record);
     return true;
 }
 
-// static void render_qmk_logo(void) {
-//     static const char PROGMEM qmk_logo[] = {
-//         0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f,0x90,0x91,0x92,0x93,0x94,
-//         0xa0,0xa1,0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,0xa8,0xa9,0xaa,0xab,0xac,0xad,0xae,0xaf,0xb0,0xb1,0xb2,0xb3,0xb4,
-//         0xc0,0xc1,0xc2,0xc3,0xc4,0xc5,0xc6,0xc7,0xc8,0xc9,0xca,0xcb,0xcc,0xcd,0xce,0xcf,0xd0,0xd1,0xd2,0xd3,0xd4,0
-//     };
-
-//     oled_write_P(qmk_logo, false);
-// }
-
-static void render_status(void) {
-    oled_write_P(PSTR("kyria [krornus]\n\n"), false);
-
-    // Host Keyboard Layer Status
-    oled_write_P(PSTR("layer: "), false);
-    switch (get_highest_layer(layer_state)) {
-        case _QWERTY:
-            oled_write_P(PSTR("default\n"), false);
-            break;
-        case _LOWER:
-            oled_write_P(PSTR("symbol\n"), false);
-            break;
-        case _RAISE:
-            oled_write_P(PSTR("number\n"), false);
-            break;
-        case _ADJUST:
-            oled_write_P(PSTR("adjust\n"), false);
-            break;
-    }
-}
-
-static inline void render_pusheen_cat(void)
+bool oled_task_user(void)
 {
-    oled_write_raw_P(pusheen[g_frame], sizeof(pusheen[g_frame]));
+    oled_write_ripples();
+    return false;
 }
-
-bool oled_task_user(void) {
-    render_status();
-    return true;
-    // if (is_keyboard_master()) {
-    //     render_status();
-    // } else {
-    //     render_pusheen_cat();
-    // }
-
-    // return true;
-}
-#endif
-
-#ifdef ENCODER_ENABLE
-bool encoder_update_user(uint8_t index, bool clockwise) {
-    if (index == 0) {
-        // Volume control
-        if (clockwise) {
-            tap_code(KC_VOLU);
-        } else {
-            tap_code(KC_VOLD);
-        }
-    }
-    else if (index == 1) {
-        // Page up/Page down
-        if (clockwise) {
-            tap_code(KC_PGDN);
-        } else {
-            tap_code(KC_PGUP);
-        }
-    }
-
-    return true;
-}
-#endif
