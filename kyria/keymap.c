@@ -124,14 +124,39 @@ layer_state_t layer_state_set_user(layer_state_t state)
 }
 #endif
 
+#ifdef OLED_ENABLE
+oled_rotation_t oled_init_user(oled_rotation_t rotation)
+{
+    ripple_init();
+
+    if (!is_keyboard_master()) {
+        return OLED_ROTATION_180;
+    }
+
+    return rotation;
+}
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record)
 {
-    process_record_ripples(record);
+    (void)keycode;
+
+    if (is_keyboard_master()) {
+        process_record_ripples(record);
+    } else {
+
+    }
+
     return true;
 }
 
 bool oled_task_user(void)
 {
-    oled_write_ripples();
+    if (is_keyboard_master()) {
+        oled_write_ripples();
+    } else {
+
+    }
+
     return false;
 }
+#endif

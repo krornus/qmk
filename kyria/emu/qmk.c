@@ -6,9 +6,6 @@
 
 #include "qmk.h"
 
-#define TIMER_DIFF(a, b, max) ((max == UINT8_MAX) ? ((uint8_t)((a) - (b))) : ((max == UINT16_MAX) ? ((uint16_t)((a) - (b))) : ((max == UINT32_MAX) ? ((uint32_t)((a) - (b))) : ((a) >= (b) ? (a) - (b) : (max) + 1 - (b) + (a)))))
-#define TIMER_DIFF_16(a, b) TIMER_DIFF(a, b, UINT16_MAX)
-
 typedef struct color color_t;
 
 struct color {
@@ -44,6 +41,7 @@ static SDL_Window *win;
 static SDL_Renderer *ren = NULL;
 static bool dirty = true;
 
+extern bool oled_task_kb(void) __attribute__ ((weak, alias ("_oled_task_kb")));
 extern bool oled_task_user(void) __attribute__ ((weak, alias ("_oled_task_user")));
 extern bool process_record_user(uint16_t keycode, keyrecord_t *record) __attribute__ ((weak, alias ("_process_record_user")));
 
@@ -97,9 +95,10 @@ static void setcolor(color_t c)
 
 void oled_clear(void)
 {
+    dirty = true;
+
     setcolor(color(0));
     SDL_RenderClear(ren);
-    SDL_RenderPresent(ren);
 }
 
 static void flush(void)
@@ -125,15 +124,24 @@ void oled_write_pixel(uint8_t x, uint8_t y, bool on)
 uint16_t timer_read(void)
 {
     struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-    return (ts.tv_nsec / 1000000) & 0xffff;
+
+    if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) == -1) {
+        err(1, "clock_gettime");
+    }
+
+    return (ts.tv_sec * 1000 + (ts.tv_nsec / 1000000)) & 0xffff;
 }
 
 uint16_t timer_elapsed(uint16_t last)
 {
     uint16_t t;
     t = timer_read();
-    return TIMER_DIFF_16(t, last);
+    return t - last;
+}
+
+bool _oled_task_kb(void)
+{
+    return oled_task_user();
 }
 
 bool _oled_task_user(void)

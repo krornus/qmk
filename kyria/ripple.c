@@ -1,32 +1,36 @@
+#ifdef OLED_ENABLE
 #include "ripple.h"
 
+#ifndef QMK_EMULATOR
+#include "print.h"
+#endif
+
 /* maximum number of ripples */
-#define RIPPLE_MAX_COUNT 3
-/* initial radius of a ripple */
-#define RIPPLE_RADIUS 2
-/* step size of each ring */
-#define RIPPLE_STEP 5
-/* maximum number of steps before disappearing */
-#define RIPPLE_STEP_MAX 5
-/* base probability a ripple pixel gets dappled */
-#define RIPPLE_DAPPLE 5
-/* speed of ripples */
-#define RIPPLE_TRAVEL 5
+#define RIPPLE_MAX 15
+/* time between frames in ms */
+#define RIPPLE_FRAMETIME 100
+/* period of the ripple in ms */
+#define RIPPLE_PERIOD 1000
+/* wavelength pf the ripple in px */
+#define RIPPLE_WAVELENGTH 10
+/* time before ripple ceases */
+#define RIPPLE_TIMEOUT 2500
 
 typedef struct ripple ripple_t;
 
 struct ripple {
     uint8_t x;
     uint8_t y;
-    uint8_t radius;
-    uint8_t step;
-    uint8_t iteration;
+    uint8_t wavelength;
+    uint16_t period;
+    uint16_t start;
+    uint16_t timeout;
 };
 
 static uint8_t rippndx = 0;
-static ripple_t ripples[RIPPLE_MAX_COUNT];
+static ripple_t ripples[RIPPLE_MAX];
 
-static inline void pixel(int x, int y, bool on)
+static inline void pixel(int x, int y)
 {
     if (x < 0 || x > UINT8_MAX) {
         return;
@@ -36,41 +40,42 @@ static inline void pixel(int x, int y, bool on)
         return;
     }
 
-    oled_write_pixel((uint8_t)x, (uint8_t)y, on);
+    oled_write_pixel((uint8_t)x, (uint8_t)y, true);
 }
 
-static inline void putquads(int xc, int yc, int x, int y, int dapple, bool on)
+static inline void putquads(int xc, int yc, int x, int y, int dapple)
 {
-    bool paint;
+    uint8_t pct;
 
-    if (on) {
-        paint = (rand() % 100) > dapple;
-    } else {
-        paint = false;
+    pct = rand() % 100;
+    if (pct < dapple) {
+        return;
     }
 
-    pixel(xc+x, yc+y, paint);
-    pixel(xc-x, yc+y, paint);
-    pixel(xc+x, yc-y, paint);
-    pixel(xc-x, yc-y, paint);
-    pixel(xc+y, yc+x, paint);
-    pixel(xc-y, yc+x, paint);
-    pixel(xc+y, yc-x, paint);
-    pixel(xc-y, yc-x, paint);
+    pixel(xc+x, yc+y);
+    pixel(xc-x, yc+y);
+    pixel(xc+x, yc-y);
+    pixel(xc-x, yc-y);
+    pixel(xc+y, yc+x);
+    pixel(xc-y, yc+x);
+    pixel(xc+y, yc-x);
+    pixel(xc-y, yc-x);
 }
 
-static void putcircle(int xc, int yc, int r, int dapple, bool on)
+/*
+ * bresenham’s circle drawing algorithm
+ */
+static void putcircle(int xc, int yc, int r, int dapple)
 {
     int x, y, d;
 
-    /* bresenham’s circle drawing algorithm */
     x = 0;
     y = r;
 
     d = 3 - 2 * r;
 
     while (y >= x) {
-        putquads(xc, yc, x, y, dapple, on);
+        putquads(xc, yc, x, y, dapple);
         x++;
 
         if (d > 0) {
@@ -87,51 +92,73 @@ static void addripple(int x, int y)
     ripples[rippndx] = (ripple_t){
         .x = x,
         .y = y,
-        .radius = RIPPLE_RADIUS,
-        .step = RIPPLE_STEP,
-        .iteration = 1,
+        .wavelength = RIPPLE_WAVELENGTH,
+        .period = RIPPLE_PERIOD,
+        .start = timer_read(),
+        .timeout = RIPPLE_TIMEOUT,
     };
 
-    rippndx = (rippndx + 1) % RIPPLE_MAX_COUNT;
+    rippndx = (rippndx + 1) % RIPPLE_MAX;
 }
 
-static void draw(ripple_t *r, uint16_t iteration, int dapple, bool on)
+static bool ripple(ripple_t *r)
 {
+    int dapple;
+    uint16_t count;
     uint16_t radius;
-    uint16_t travel;
+    uint16_t elapsed;
+    uint16_t timeout;
+    float ratio;
 
-    radius = r->radius + r->step * iteration;
-    /* the amount the radius has traveled */
-    travel = RIPPLE_TRAVEL * (iteration - 1);
+    timeout = r->timeout / 2;
 
-    for (size_t i = 0; i < iteration; i++) {
-        putcircle(r->x, r->y, radius + travel, dapple*iteration, on);
-        radius += r->step;
+    /* elapsed time for the ripple */
+    elapsed = timer_elapsed(r->start);
+    /* check if the ripple has dissapated */
+    if (elapsed > r->timeout) {
+        r->start = 0;
+        return false;
     }
+
+    /* the number of ripples */
+    count = (elapsed + (r->period - 1)) / r->period;
+    /* the radius of the innermost ripple
+     * v = freq * wavelength
+     * v = 1/period * wavelength
+     * v = wavelength / period
+     * d = t * v
+     * d = t * wavelength / period
+     * let p = t / period
+     * d = p * wavelength */
+    ratio = ((float)(elapsed % r->period)) / ((float)r->period);
+    radius = r->wavelength * ratio;
+
+    /* if we are past the timeout, stop creating inner circles */
+    if (elapsed > timeout) {
+        uint16_t max;
+        uint16_t removed;
+
+        /* get max number of circles possible */
+        max = (timeout + (r->period - 1)) / r->period;
+        /* this gives us number of circles to delete */
+        removed = count - max;
+
+        count -= removed;
+        radius += r->wavelength * removed;
+    }
+
+    dapple = (((float)elapsed) / ((float)r->timeout)) * 100;
+    for (uint16_t i = 0; i < count; i++) {
+        putcircle(r->x, r->y, radius, dapple);
+        radius += r->wavelength;
+    }
+
+    return true;
 }
 
-static bool ripple(ripple_t *r, int dapple)
+void ripple_init(void)
 {
-    /* step 1: undraw all ripples */
-    if (r->iteration > 1) {
-        draw(r, r->iteration - 1, 0, false);
-    }
-
-    if (!r->iteration) {
-        return false;
-    } else if (r->iteration > RIPPLE_STEP_MAX) {
-        r->iteration = 0;
-        return false;
-    }
-
-    /* step 2: redraw new ripples */
-    if (r->iteration) {
-        draw(r, r->iteration, dapple, true);
-    }
-
-    r->iteration++;
-
-    return r->iteration <= RIPPLE_STEP_MAX;
+    srand(timer_read());
 }
 
 void process_record_ripples(keyrecord_t *record)
@@ -139,8 +166,7 @@ void process_record_ripples(keyrecord_t *record)
     /* TODO: find oled size #defines so numbers arent hardcoded */
     if (record->event.pressed) {
         addripple(
-            128 - record->event.key.col * (128 / MATRIX_COLS),
-            record->event.key.row * (64 / MATRIX_ROWS)
+            rand() % 128, rand() % 64
         );
     }
 }
@@ -152,21 +178,28 @@ void oled_write_ripples(void)
 
     int count;
 
-    if (timer_elapsed(key_timer) > 100) {
+    if (timer_elapsed(key_timer) > RIPPLE_FRAMETIME) {
         key_timer = timer_read();
 
+        if (!clear) {
+            oled_clear();
+        }
+
         count = 0;
-        for (size_t i = 0; i < RIPPLE_MAX_COUNT; i++) {
-            count += ripple(&ripples[i], RIPPLE_DAPPLE);
+        for (size_t i = 0; i < RIPPLE_MAX; i++) {
+            if (ripples[i].start) {
+                count += ripple(&ripples[i]);
+            }
         }
 
         if (!count) {
-            if (!clear) {
-                clear = true;
-                oled_clear();
-            }
+            oled_clear();
+            clear = true;
         } else {
             clear = false;
         }
     }
 }
+#else
+enum empty { NIL };
+#endif

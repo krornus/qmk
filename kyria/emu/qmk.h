@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define PROGMEM
 
@@ -33,6 +34,13 @@ typedef struct {
     uint16_t keycode;
 } keyrecord_t;
 
+typedef enum {
+    OLED_ROTATION_0   = 0,
+    OLED_ROTATION_90  = 1,
+    OLED_ROTATION_180 = 2,
+    OLED_ROTATION_270 = 3, // OLED_ROTATION_90 | OLED_ROTATION_180
+} oled_rotation_t;
+
 void init(void);
 void destroy(void);
 
@@ -42,5 +50,12 @@ void oled_clear(void);
 
 uint16_t timer_read(void);
 uint16_t timer_elapsed(uint16_t last);
+
+static inline bool is_keyboard_master(void)
+{
+    return true;
+}
+
+#define uprintf printf
 
 #endif // oled_h_INCLUDED
