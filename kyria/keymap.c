@@ -17,10 +17,13 @@
 #ifndef QMK_EMULATOR
 #include QMK_KEYBOARD_H
 #include "config.h"
-#include "pusheen.h"
-#else
+#ifdef CONSOLE_ENABLE
+#include "print.h"
+#endif  // #ifndef CONSOLE_ENABLE
+#else   // #ifndef QMK_EMULATOR
 #include "emu/qmk.h"
-#endif
+#endif  // #ifndef QMK_EMULATOR
+
 
 #include "ripple.h"
 
@@ -136,26 +139,23 @@ oled_rotation_t oled_init_user(oled_rotation_t rotation)
     return rotation;
 }
 
+bool should_process_keypress(void)
+{
+    return true;
+}
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record)
 {
     (void)keycode;
 
-    if (is_keyboard_master()) {
-        process_record_ripples(record);
-    } else {
-
-    }
+    process_record_ripples(record);
 
     return true;
 }
 
 bool oled_task_user(void)
 {
-    if (is_keyboard_master()) {
-        oled_write_ripples();
-    } else {
-
-    }
+    oled_write_ripples();
 
     return false;
 }

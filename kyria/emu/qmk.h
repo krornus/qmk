@@ -7,7 +7,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#define uprintf printf
+
 #define PROGMEM
+
+#define OLED_DISPLAY_WIDTH  128
+#define OLED_DISPLAY_HEIGHT 64
 
 typedef struct {
     uint8_t col;
@@ -55,7 +60,5 @@ static inline bool is_keyboard_master(void)
 {
     return true;
 }
-
-#define uprintf printf
 
 #endif // oled_h_INCLUDED

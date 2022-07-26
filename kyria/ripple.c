@@ -10,17 +10,23 @@
 /* time between frames in ms */
 #define RIPPLE_FRAMETIME 100
 /* period of the ripple in ms */
-#define RIPPLE_PERIOD 1000
-/* wavelength pf the ripple in px */
-#define RIPPLE_WAVELENGTH 10
+#define RIPPLE_PERIOD 1500
+/* wavelength of the ripple in px */
+#define RIPPLE_WAVELENGTH 15
 /* time before ripple ceases */
-#define RIPPLE_TIMEOUT 2500
+#define RIPPLE_TIMEOUT 5000
+/* ripple scroll speed x */
+#define RIPPLE_SCROLL_X 0
+/* ripple scroll speed y */
+#define RIPPLE_SCROLL_Y 0
 
 typedef struct ripple ripple_t;
 
 struct ripple {
     uint8_t x;
     uint8_t y;
+    int8_t x_scroll;
+    int8_t y_scroll;
     uint8_t wavelength;
     uint16_t period;
     uint16_t start;
@@ -92,6 +98,8 @@ static void addripple(int x, int y)
     ripples[rippndx] = (ripple_t){
         .x = x,
         .y = y,
+        .x_scroll = RIPPLE_SCROLL_X,
+        .y_scroll = RIPPLE_SCROLL_Y,
         .wavelength = RIPPLE_WAVELENGTH,
         .period = RIPPLE_PERIOD,
         .start = timer_read(),
@@ -163,11 +171,16 @@ void ripple_init(void)
 
 void process_record_ripples(keyrecord_t *record)
 {
-    /* TODO: find oled size #defines so numbers arent hardcoded */
+    bool is_master_press;
+
     if (record->event.pressed) {
-        addripple(
-            rand() % 128, rand() % 64
-        );
+        is_master_press = record->event.key.row < (MATRIX_ROWS / 2);
+        if (is_master_press == is_keyboard_master()) {
+            addripple(
+                rand() % OLED_DISPLAY_WIDTH,
+                rand() % OLED_DISPLAY_HEIGHT
+            );
+        }
     }
 }
 
@@ -189,6 +202,9 @@ void oled_write_ripples(void)
         for (size_t i = 0; i < RIPPLE_MAX; i++) {
             if (ripples[i].start) {
                 count += ripple(&ripples[i]);
+
+                ripples[i].x += ripples[i].x_scroll;
+                ripples[i].y += ripples[i].y_scroll;
             }
         }
 
